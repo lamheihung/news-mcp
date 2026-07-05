@@ -14,7 +14,7 @@ from google import genai
 
 from src.models import Company
 
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-3.5-flash"
 
 
 class CompanyResolutionError(ValueError):
