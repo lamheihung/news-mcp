@@ -1,4 +1,9 @@
 # Developer-curated sources.
 # Analysts can only use sources listed here.
 # Each source must have a matching scraper module under scrapers/.
-sources: []
+sources:
+  - id: example
+    name: Example Source
+    base_url: https://example.com
+    scraper_module: scrapers.example
+    description: An example source for testing and documentation.
