@@ -17,3 +17,11 @@ data/
 
 # Claude Code session files
 .claude/
+
+# Tool caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Coverage data
+.coverage
