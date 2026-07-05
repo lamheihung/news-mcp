@@ -5,6 +5,7 @@ See architecture/001-architecture-design.md for the tool contract.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from fastmcp import FastMCP
 from src.config import load_config
 from src.models import Article, Company, DateRange, Source
 from src.resolver import resolve_company as _resolve_company
+
+logger = logging.getLogger(__name__)
 
 CONFIG_PATH = Path("config.yaml")
 
@@ -27,10 +30,12 @@ def init_tools(config_path: Path = CONFIG_PATH) -> None:
     """
     global _configured_sources
     _configured_sources = load_config(config_path)
+    logger.info("Tools initialized with %d source(s)", len(_configured_sources))
 
 
 def list_sources() -> list[Source]:
     """Return all configured news/information sources."""
+    logger.debug("list_sources called")
     return _configured_sources
 
 
@@ -43,6 +48,7 @@ def resolve_company(identifier: str) -> Company:
     Returns:
         A validated Company model.
     """
+    logger.debug("resolve_company called with identifier: %s", identifier)
     return _resolve_company(identifier)
 
 
@@ -65,6 +71,11 @@ def research_company(
     Returns:
         A list of mock Article objects filtered by date range and source IDs.
     """
+    logger.debug(
+        "research_company called: ticker=%s, sources=%s",
+        bloomberg_ticker,
+        sources,
+    )
     date_range = _build_date_range(start_date, end_date)
     articles = _build_mock_articles(bloomberg_ticker)
 
@@ -78,6 +89,11 @@ def research_company(
         source_set = set(sources)
         filtered = [article for article in filtered if article.source_id in source_set]
 
+    logger.info(
+        "research_company returning %d article(s) for %s",
+        len(filtered),
+        bloomberg_ticker,
+    )
     return filtered
 
 
@@ -90,6 +106,7 @@ def register_tools(mcp: FastMCP) -> None:
     mcp.add_tool(list_sources)
     mcp.add_tool(resolve_company)
     mcp.add_tool(research_company)
+    logger.info("Registered MCP tools with FastMCP app")
 
 
 def _build_date_range(start_date: str | None, end_date: str | None) -> DateRange:

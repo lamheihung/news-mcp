@@ -6,6 +6,7 @@ See architecture/001-architecture-design.md for the resolver contract.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from typing import Any
@@ -15,6 +16,8 @@ from google import genai
 from src.models import Company
 
 GEMINI_MODEL = "gemini-3.5-flash"
+
+logger = logging.getLogger(__name__)
 
 
 class CompanyResolutionError(ValueError):
@@ -34,8 +37,11 @@ def resolve_company(identifier: str) -> Company:
         CompanyResolutionError: If the API key is missing, the API call fails,
             or the response cannot be parsed into a Company.
     """
+    logger.debug("Resolving company identifier: %s", identifier)
+
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
+        logger.error("GEMINI_API_KEY environment variable is missing")
         raise CompanyResolutionError(
             "GEMINI_API_KEY environment variable is required to resolve companies"
         )
@@ -49,9 +55,17 @@ def resolve_company(identifier: str) -> Company:
             contents=prompt,
         )
     except Exception as exc:
+        logger.error("Gemini API error while resolving %r: %s", identifier, exc)
         raise CompanyResolutionError(f"Gemini API error: {exc}") from exc
 
-    return _parse_response(response.text, identifier)
+    company = _parse_response(response.text, identifier)
+    logger.info(
+        "Resolved %r to %s (%s)",
+        identifier,
+        company.bloomberg_ticker,
+        company.name,
+    )
+    return company
 
 
 def _build_prompt(identifier: str) -> str:
@@ -73,6 +87,7 @@ def _build_prompt(identifier: str) -> str:
 
 def _parse_response(text: str | None, identifier: str) -> Company:
     if text is None:
+        logger.error("Gemini returned empty response for %r", identifier)
         raise CompanyResolutionError("Gemini response text is empty")
     cleaned = text.strip()
     cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
@@ -81,9 +96,15 @@ def _parse_response(text: str | None, identifier: str) -> Company:
     try:
         data: Any = json.loads(cleaned)
     except json.JSONDecodeError as exc:
+        logger.error(
+            "Could not parse Gemini response for %r as JSON: %s",
+            identifier,
+            exc,
+        )
         raise CompanyResolutionError(f"Could not parse Gemini response as JSON: {exc}") from exc
 
     if not isinstance(data, dict):
+        logger.error("Gemini response for %r is not a JSON object", identifier)
         raise CompanyResolutionError("Gemini response is not a JSON object")
 
     ticker = data.get("bloomberg_ticker")
@@ -91,10 +112,13 @@ def _parse_response(text: str | None, identifier: str) -> Company:
     aliases = data.get("aliases")
 
     if not isinstance(ticker, str) or not ticker.strip():
+        logger.error("Gemini response for %r missing valid 'bloomberg_ticker'", identifier)
         raise CompanyResolutionError("Gemini response missing valid 'bloomberg_ticker'")
     if not isinstance(name, str) or not name.strip():
+        logger.error("Gemini response for %r missing valid 'name'", identifier)
         raise CompanyResolutionError("Gemini response missing valid 'name'")
     if not isinstance(aliases, list) or not all(isinstance(a, str) for a in aliases):
+        logger.error("Gemini response for %r missing valid 'aliases' list", identifier)
         raise CompanyResolutionError("Gemini response missing valid 'aliases' list")
 
     normalized_aliases = [a.strip() for a in aliases if a.strip()]
