@@ -1,0 +1,4 @@
+# Developer-curated sources.
+# Analysts can only use sources listed here.
+# Each source must have a matching scraper module under scrapers/.
+sources: []
