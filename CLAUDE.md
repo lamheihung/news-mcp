@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an **MCP (Model Context Protocol) server** for investment analysts. It runs as a single Python process using FastMCP over stdio. Analysts interact through natural language in their LLM client; the server resolves company identifiers to Bloomberg tickers, fetches articles from developer-curated sources, and returns raw articles inline for the LLM to synthesize.
 
-The project is currently in the **foundation phase**: data models, config loading, and MCP tools are being built. Article caching, storage, and source-specific scrapers are intentionally deferred.
+The **Sprint 001 foundation phase is complete**: data models, config loading, MCP tools, unit tests, and an integration smoke test are in place. Article caching, storage, and source-specific scrapers are intentionally deferred to a later sprint.
 
 ## Common Commands
 
@@ -62,15 +62,26 @@ cp .env.template .env
 
 ## Architecture
 
-- **`main.py`** is the FastMCP entry point. It creates the `mcp` app and runs it with stdio transport. Tool handlers are registered here (or imported from `src.tools`).
+- **`main.py`** is the FastMCP entry point. It creates the `mcp` app via `create_app()`, registers tools, and runs the server over stdio.
 - **`src/config.py`** loads and validates `config.yaml` into `Source` Pydantic models via `load_config(path)`. It fails fast with readable errors.
 - **`src/models.py`** defines the canonical data models: `Company`, `Source`, `Article`, and `DateRange`. `DateRange` validates that `end >= start`.
-- **`src/resolver.py`** (to be implemented) normalizes any company identifier to a Bloomberg ticker using the Gemini API.
-- **`src/tools.py`** (to be implemented) exposes three MCP tools: `list_sources`, `resolve_company`, and `research_company`. In the foundation phase, `research_company` returns mock articles.
+- **`src/resolver.py`** normalizes any company identifier to a Bloomberg ticker using the Gemini API. It raises `CompanyResolutionError` on missing key, API failure, or unparseable response.
+- **`src/tools.py`** exposes three MCP tools: `list_sources`, `resolve_company`, and `research_company`. `research_company` currently returns mock articles filtered by date range and optional source IDs.
 - **`scrapers/`** (deferred) will contain source-specific scraper plugins, each implementing `fetch_articles` and `is_complete`.
 - **`data/`** (deferred) will store cached articles as `data/{bloomberg_ticker}/{source_name}/{title_hash}.md`.
 
 The server is designed so that sources are developer-curated: an analyst can only query sources registered in `config.yaml`. Adding a new source requires implementing a matching scraper module.
+
+## Testing
+
+Tests live in `tests/`:
+
+- `test_models.py` — Pydantic model validation, including `DateRange`.
+- `test_config.py` — `load_config` success and error paths.
+- `test_resolver.py` — Gemini resolver parsing, error handling, and edge cases.
+- `test_tools.py` — MCP tool handlers and FastMCP schema/serialization checks.
+- `test_main.py` — `create_app()` config loading, tool registration, and startup.
+- `test_integration.py` — end-to-end smoke test over stdio. It exercises `list_tools`, `list_sources`, `resolve_company`, and `research_company`. The live Gemini call is skipped when `GEMINI_API_KEY` is missing or the API returns an error/times out.
 
 ## Quality Gates
 
@@ -91,4 +102,7 @@ Runtime dependencies live in `[project] dependencies` in `pyproject.toml`. Dev d
 
 ## Branching Convention
 
-Features are developed on `feature/sprint-XXX-task-YYY` branches and merged into `master` via fast-forward merges.
+- Feature work for sprint tasks: `feature/sprint-XXX-task-YYY`.
+- Documentation updates: `docs/...`.
+- Test-only additions/fixes: `test/...`.
+- All branches are merged into `master` via fast-forward merges.
