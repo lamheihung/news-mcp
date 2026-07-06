@@ -1,6 +1,6 @@
 # Architecture Design v001
 
-Last updated: 2026-07-04
+Last updated: 2026-07-06
 
 ## Covered Specs
 
@@ -152,9 +152,9 @@ A single Python process running a FastMCP server over stdio. The foundation expo
 
 ## Open Questions
 
-- [ ] Final structure of `config.yaml` for sources.
-- [ ] Mock article design (deferred to testing phase).
-- [ ] First real scraper source (deferred).
+- [x] Final structure of `config.yaml` for sources. — Finalized in Task 002; see `config.yaml`.
+- [x] Mock article design (deferred to testing phase). — Implemented in Task 005/008; see `src/tools.py` and `tests/test_integration.py`.
+- [ ] First real scraper source (deferred to a later sprint).
 
 ## Risks & Mitigations
 

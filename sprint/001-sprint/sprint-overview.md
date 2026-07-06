@@ -53,22 +53,22 @@ The longest dependency chain determines the minimum sprint duration:
 ### Backend
 | ID | Task Name | Dependencies | Status |
 |----|-----------|--------------|--------|
-| 001 | Data Models | Blocked by: None | Not Started |
-| 002 | Config Loader | Blocked by: 001 | Not Started |
-| 004 | Company Resolver | Blocked by: 001, 003 | Not Started |
-| 005 | MCP Tools | Blocked by: 001, 002, 004 | Not Started |
-| 006 | Server Entrypoint | Blocked by: 002, 003, 005 | Not Started |
+| 001 | Data Models | Blocked by: None | Completed |
+| 002 | Config Loader | Blocked by: 001 | Completed |
+| 004 | Company Resolver | Blocked by: 001, 003 | Completed |
+| 005 | MCP Tools | Blocked by: 001, 002, 004 | Completed |
+| 006 | Server Entrypoint | Blocked by: 002, 003, 005 | Completed |
 
 ### Infrastructure
 | ID | Task Name | Dependencies | Status |
 |----|-----------|--------------|--------|
-| 003 | Dependencies | Blocked by: None | Not Started |
+| 003 | Dependencies | Blocked by: None | Completed |
 
 ### Testing
 | ID | Task Name | Dependencies | Status |
 |----|-----------|--------------|--------|
-| 007 | Unit Tests | Blocked by: 001, 002, 004, 005 | Not Started |
-| 008 | Integration Smoke Test | Blocked by: 003, 005, 006 | Not Started |
+| 007 | Unit Tests | Blocked by: 001, 002, 004, 005 | Completed |
+| 008 | Integration Smoke Test | Blocked by: 003, 005, 006 | Completed |
 
 ## Parallelization Opportunities
 
@@ -96,11 +96,11 @@ Tasks that can be worked on simultaneously:
 ## Sprint Completion Criteria
 
 All tasks in this sprint are complete when:
-- [ ] All task success criteria verified
-- [ ] All status files show "Done" state
-- [ ] Unit test coverage is at least 80% across `src/` modules
-- [ ] Integration smoke test passes end-to-end
-- [ ] No blocking issues remaining
+- [x] All task success criteria verified
+- [x] All status files show "Done" state
+- [x] Unit test coverage is at least 80% across `src/` modules
+- [x] Integration smoke test passes end-to-end
+- [x] No blocking issues remaining
 
 ## Notes
 - This sprint covers the foundation phase described in `architecture/001-architecture-design.md`.
