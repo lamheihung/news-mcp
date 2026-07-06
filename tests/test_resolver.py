@@ -100,3 +100,55 @@ def test_resolve_company_strips_markdown_fences() -> None:
     assert company.bloomberg_ticker == "AAPL US Equity"
     assert company.name == "Apple Inc."
     assert "Apple" in company.aliases
+
+
+def test_resolve_company_empty_response() -> None:
+    mock_response: Any = MagicMock()
+    mock_response.text = None
+
+    mock_client: Any = MagicMock()
+    mock_client.models.generate_content.return_value = mock_response
+
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}):
+        with patch("src.resolver.genai.Client", return_value=mock_client):
+            with pytest.raises(CompanyResolutionError, match="empty"):
+                resolve_company("Apple")
+
+
+def test_resolve_company_response_not_dict() -> None:
+    mock_response: Any = MagicMock()
+    mock_response.text = json.dumps(["not", "a", "dict"])
+
+    mock_client: Any = MagicMock()
+    mock_client.models.generate_content.return_value = mock_response
+
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}):
+        with patch("src.resolver.genai.Client", return_value=mock_client):
+            with pytest.raises(CompanyResolutionError, match="not a JSON object"):
+                resolve_company("Apple")
+
+
+def test_resolve_company_missing_ticker() -> None:
+    mock_response: Any = MagicMock()
+    mock_response.text = json.dumps({"name": "Apple Inc.", "aliases": ["Apple"]})
+
+    mock_client: Any = MagicMock()
+    mock_client.models.generate_content.return_value = mock_response
+
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}):
+        with patch("src.resolver.genai.Client", return_value=mock_client):
+            with pytest.raises(CompanyResolutionError, match="bloomberg_ticker"):
+                resolve_company("Apple")
+
+
+def test_resolve_company_missing_aliases() -> None:
+    mock_response: Any = MagicMock()
+    mock_response.text = json.dumps({"bloomberg_ticker": "AAPL US Equity", "name": "Apple Inc."})
+
+    mock_client: Any = MagicMock()
+    mock_client.models.generate_content.return_value = mock_response
+
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}):
+        with patch("src.resolver.genai.Client", return_value=mock_client):
+            with pytest.raises(CompanyResolutionError, match="aliases"):
+                resolve_company("Apple")
