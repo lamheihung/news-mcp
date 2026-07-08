@@ -26,7 +26,7 @@ jobs:
           version: latest
 
       - name: Sync dependencies
-        run: uv sync --all-groups
+        run: uv sync --group dev --group scrapers
 
       - name: Check lock file is up to date
         run: uv lock --locked

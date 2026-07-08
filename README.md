@@ -10,6 +10,10 @@ An MCP server for investment analysts. Resolves company identifiers, fetches art
    ```bash
    uv sync
    ```
+   To enable source-specific scrapers (e.g. pcwatch), also install the optional group:
+   ```bash
+   uv sync --group scrapers
+   ```
 4. Run the server:
    ```bash
    uv run main.py
@@ -17,4 +21,4 @@ An MCP server for investment analysts. Resolves company identifiers, fetches art
 
 ## Architecture
 
-See `architecture/001-architecture-design.md` and `specs/investment-research-mcp-server.md`.
+See `architecture/001-architecture-design.md`, `architecture/002-architecture-design.md`, and `specs/investment-research-mcp-server.md`.

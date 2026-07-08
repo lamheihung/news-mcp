@@ -16,6 +16,9 @@ All commands use `uv`.
 # Install dependencies
 uv sync
 
+# Install optional scraper dependencies (required for pcwatch and future scrapers)
+uv sync --group scrapers
+
 # Run the MCP server (stdio transport)
 uv run main.py
 
@@ -98,7 +101,7 @@ See `QUALITY_CHECKLIST.md` for the full list and `.github/workflows/ci.yml` for 
 
 ## Dependency Management
 
-Runtime dependencies live in `[project] dependencies` in `pyproject.toml`. Dev dependencies (pytest, mypy, ruff, bandit, pre-commit, etc.) live in `[dependency-groups] dev`. After changing either, run `uv lock` to regenerate `uv.lock`.
+Runtime dependencies live in `[project] dependencies` in `pyproject.toml`. Dev dependencies (pytest, mypy, ruff, bandit, pre-commit, etc.) live in `[dependency-groups] dev`. Optional scraper dependencies such as Playwright live in `[dependency-groups] scrapers`. After changing either, run `uv lock` to regenerate `uv.lock`.
 
 ## Branching Convention
 
