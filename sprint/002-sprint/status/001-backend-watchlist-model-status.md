@@ -1,8 +1,8 @@
 # Status: Task 001
 
 ## Progress
-- Percentage: 0%
-- State: Not Started
+- Percentage: 100%
+- State: Completed
 
 ## Notes / Blockers
 - No blockers.
@@ -12,3 +12,6 @@
 
 ## Implementation Log
 - Task created during sprint 002 decomposition.
+- Added `WatchlistEntry` to `src/models.py`.
+- Verified `WatchlistEntry` imports, instantiates, and validates `search_terms`/`exhausted_before` types.
+- Ran `tests/test_models.py`; all 9 tests pass.

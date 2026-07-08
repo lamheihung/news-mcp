@@ -1,6 +1,7 @@
 """Pydantic data models for the Investment Research MCP Server.
 
-See architecture/001-architecture-design.md for the canonical definitions.
+See architecture/001-architecture-design.md and architecture/002-architecture-design.md
+for the canonical definitions.
 """
 
 from __future__ import annotations
@@ -54,3 +55,13 @@ class DateRange(BaseModel):
         if self.end < self.start:
             raise ValueError("end date must be on or after start date")
         return self
+
+
+class WatchlistEntry(BaseModel):
+    """An automatically tracked company with per-source search terms."""
+
+    bloomberg_ticker: str
+    name: str
+    aliases: list[str]
+    search_terms: dict[str, list[str]]
+    exhausted_before: dict[str, date] = {}
