@@ -7,3 +7,8 @@ sources:
     base_url: https://example.com
     scraper_module: scrapers.example
     description: An example source for testing and documentation.
+  - id: pcwatch
+    name: PC Watch
+    base_url: https://pc.watch.impress.co.jp/
+    scraper_module: scrapers.pcwatch
+    description: Japanese PC/tech news site. Returns raw Japanese article content (English translation deferred).

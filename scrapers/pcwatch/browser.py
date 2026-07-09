@@ -61,11 +61,13 @@ def _search_url(term: str, page_number: int) -> str:
 
 async def search_results(page: Page, term: str, stop_before: date) -> list[SearchResult]:
     """Collect pcwatch search results for a term until results are older than stop_before."""
+    page.set_default_navigation_timeout(60000)
     results: list[SearchResult] = []
     seen_urls: set[str] = set()
 
-    for page_number in range(1, 101):
-        await page.goto(_search_url(term, page_number))
+    await page.goto(_search_url(term, 1), wait_until="domcontentloaded")
+
+    for _ in range(100):
         await page.wait_for_selector(".gsc-webResult", timeout=10000)
 
         rows = await page.locator(".gsc-webResult").all()
@@ -93,16 +95,29 @@ async def search_results(page: Page, term: str, stop_before: date) -> list[Searc
         if oldest_seen is not None and oldest_seen < stop_before:
             break
 
+        next_pages = page.locator(".gsc-cursor-page").filter(has_text=re.compile(r"^\d+$"))
+        current = await page.locator(".gsc-cursor-current-page").text_content()
+        next_page = None
+        for btn in await next_pages.all():
+            text = await btn.text_content()
+            if text and int(text) > int(current or 0):
+                next_page = btn
+                break
+        if next_page is None:
+            break
+        await next_page.click()
         await page.wait_for_timeout(500)
 
     return results
 
 
 async def _extract_content(page: Page) -> str:
-    """Return clean article text from .main-contents, excluding related links/ads."""
+    """Return article text from .main-contents or legacy .news."""
     text: str = await page.evaluate(
         """() => {
-            const container = document.querySelector('article .main-contents');
+            const container =
+                document.querySelector('article .main-contents') ||
+                document.querySelector('article .news');
             if (!container) return '';
             const clone = container.cloneNode(true);
             const selectors = [
@@ -121,16 +136,38 @@ async def _extract_content(page: Page) -> str:
     return text
 
 
+_ISO_DATE_RE = re.compile(r'content="(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})"')
+
+
+def _parse_iso_date(value: str) -> datetime:
+    """Parse an ISO-8601 datetime string."""
+    return datetime.fromisoformat(value)
+
+
+async def _extract_publish_date(page: Page, url: str) -> datetime:
+    """Return the article publish date from meta tags or the page text fallback."""
+    head = await page.locator("head").inner_html()
+    match = _ISO_DATE_RE.search(head)
+    if match:
+        return _parse_iso_date(match.group(1))
+    raise ValueError(f"Could not determine publish date for {url}")
+
+
+async def _extract_title(page: Page) -> str:
+    """Return the article title from the standard or legacy markup."""
+    title_locator = page.locator("article h1, article .title strong").first
+    title_text = (await title_locator.text_content() or "").strip()
+    return title_text
+
+
 async def extract_article(page: Page, url: str, bloomberg_ticker: str, source_id: str) -> Article:
     """Open a pcwatch article page and extract an Article model."""
-    await page.goto(url)
-    await page.wait_for_selector("article h1", timeout=10000)
+    page.set_default_navigation_timeout(60000)
+    await page.goto(url, wait_until="domcontentloaded")
+    await page.wait_for_selector("article", timeout=10000)
 
-    title = (await page.locator("article h1").text_content() or "").strip()
-    date_text = (
-        await page.locator("article .article-info .publish-date").text_content() or ""
-    ).strip()
-    published_at = _parse_publish_date(date_text)
+    title = await _extract_title(page)
+    published_at = await _extract_publish_date(page, url)
     content = await _extract_content(page)
 
     article_id = _title_hash(title)

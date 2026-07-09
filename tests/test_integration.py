@@ -68,8 +68,9 @@ def test_server_smoke() -> None:
                 assert list_result.isError is False
                 assert list_result.structuredContent is not None
                 sources = list_result.structuredContent["result"]
-                assert len(sources) == 1
-                assert sources[0]["id"] == "example"
+                ids = {source["id"] for source in sources}
+                assert "example" in ids
+                assert "pcwatch" in ids
 
                 if os.environ.get("GEMINI_API_KEY"):
                     try:

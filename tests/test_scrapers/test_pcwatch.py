@@ -1,15 +1,18 @@
-"""Tests for the pcwatch scraper browser helpers."""
+"""Tests for the pcwatch scraper browser helpers and plugin."""
 
 from datetime import date, datetime
+from pathlib import Path
 
 import pytest
 
+from scrapers.pcwatch import PcwatchScraper
 from scrapers.pcwatch.browser import (
     SearchResult,
     _parse_buddhist_date,
     _parse_publish_date,
     is_headed,
 )
+from src.models import Company, DateRange, Source
 
 
 class TestParseBuddhistDate:
@@ -54,3 +57,99 @@ class TestSearchResult:
         assert result.url == "https://example.com"
         assert result.title == "Example"
         assert result.snippet_date == date(2026, 1, 1)
+
+
+class TestPcwatchScraper:
+    @pytest.fixture
+    def scraper(self) -> PcwatchScraper:
+        return PcwatchScraper()
+
+    @pytest.fixture
+    def source(self) -> Source:
+        return Source(
+            id="pcwatch",
+            name="PC Watch",
+            base_url="https://pc.watch.impress.co.jp/",
+            scraper_module="scrapers.pcwatch",
+            description="Japanese PC/tech news site.",
+        )
+
+    @pytest.fixture
+    def company(self) -> Company:
+        return Company(
+            bloomberg_ticker="000660 KS Equity",
+            name="SK hynix",
+            aliases=["SK Hynix"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_is_complete_returns_false_without_exhausted_marker(
+        self, scraper: PcwatchScraper, source: Source, company: Company, tmp_path: Path
+    ) -> None:
+        monkeypatch = pytest.MonkeyPatch()
+        watchlist_path = tmp_path / "watchlist.yaml"
+        watchlist_path.write_text("companies: []\n", encoding="utf-8")
+        monkeypatch.setattr("scrapers.pcwatch.WATCHLIST_PATH", watchlist_path)
+        try:
+            assert (
+                await scraper.is_complete(
+                    source, company, DateRange(start=date(2026, 1, 1), end=date(2026, 6, 30))
+                )
+                is False
+            )
+        finally:
+            monkeypatch.undo()
+
+    @pytest.mark.asyncio
+    async def test_is_complete_returns_true_when_start_on_exhausted_marker(
+        self, scraper: PcwatchScraper, source: Source, company: Company, tmp_path: Path
+    ) -> None:
+        monkeypatch = pytest.MonkeyPatch()
+        watchlist_path = tmp_path / "watchlist.yaml"
+        watchlist_path.write_text(
+            "companies:\n"
+            '  - bloomberg_ticker: "000660 KS Equity"\n'
+            "    name: SK hynix\n"
+            "    aliases: [SK Hynix]\n"
+            "    search_terms: {}\n"
+            "    exhausted_before:\n"
+            "      pcwatch: 2026-01-01\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("scrapers.pcwatch.WATCHLIST_PATH", watchlist_path)
+        try:
+            assert (
+                await scraper.is_complete(
+                    source, company, DateRange(start=date(2026, 1, 1), end=date(2026, 6, 30))
+                )
+                is True
+            )
+        finally:
+            monkeypatch.undo()
+
+    @pytest.mark.asyncio
+    async def test_is_complete_returns_false_when_start_before_exhausted_marker(
+        self, scraper: PcwatchScraper, source: Source, company: Company, tmp_path: Path
+    ) -> None:
+        monkeypatch = pytest.MonkeyPatch()
+        watchlist_path = tmp_path / "watchlist.yaml"
+        watchlist_path.write_text(
+            "companies:\n"
+            '  - bloomberg_ticker: "000660 KS Equity"\n'
+            "    name: SK hynix\n"
+            "    aliases: [SK Hynix]\n"
+            "    search_terms: {}\n"
+            "    exhausted_before:\n"
+            "      pcwatch: 2026-01-01\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("scrapers.pcwatch.WATCHLIST_PATH", watchlist_path)
+        try:
+            assert (
+                await scraper.is_complete(
+                    source, company, DateRange(start=date(2025, 6, 1), end=date(2026, 6, 30))
+                )
+                is False
+            )
+        finally:
+            monkeypatch.undo()
