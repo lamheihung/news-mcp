@@ -1,6 +1,7 @@
 """Company identifier resolution via Gemini API.
 
-See architecture/001-architecture-design.md for the resolver contract.
+See architecture/001-architecture-design.md and architecture/002-architecture-design.md
+for the resolver contract.
 """
 
 from __future__ import annotations
@@ -9,13 +10,16 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 from google import genai
 
 from src.models import Company
+from src.watchlist import load_watchlist, save_watchlist, upsert_company
 
 GEMINI_MODEL = "gemini-3.5-flash"
+WATCHLIST_PATH = Path("data/watchlist.yaml")
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +69,23 @@ def resolve_company(identifier: str) -> Company:
         company.bloomberg_ticker,
         company.name,
     )
+    _upsert_watchlist(company)
     return company
+
+
+def _upsert_watchlist(company: Company) -> None:
+    """Persist a resolved company to the automatic watchlist."""
+    try:
+        entries = load_watchlist(WATCHLIST_PATH)
+        entries = upsert_company(entries, company)
+        save_watchlist(entries, WATCHLIST_PATH)
+        logger.info(
+            "Upserted %s (%s) into watchlist",
+            company.bloomberg_ticker,
+            company.name,
+        )
+    except Exception as exc:
+        logger.warning("Failed to update watchlist after resolution: %s", exc)
 
 
 def _build_prompt(identifier: str) -> str:
