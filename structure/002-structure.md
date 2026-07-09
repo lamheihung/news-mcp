@@ -11,8 +11,8 @@ Created from: `architecture/002-architecture-design.md`
 - `scrapers/__init__.py` — scraper package marker.
 - `scrapers/pcwatch/__init__.py` — placeholder for `PcwatchScraper`.
 - `scrapers/pcwatch/browser.py` — placeholder for Playwright browser helpers.
-- `tests/scrapers/__init__.py` — test package marker.
-- `tests/scrapers/test_pcwatch.py` — placeholder for pcwatch scraper tests.
+- `tests/test_scrapers/__init__.py` — test package marker.
+- `tests/test_scrapers/test_pcwatch.py` — pcwatch scraper unit tests.
 - `data/watchlist.yaml` — empty automatic watchlist starter file.
 - `structure/002-structure.md` (this file).
 
