@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Generator
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastmcp import FastMCP
@@ -19,12 +20,35 @@ from src.tools import (
     research_company,
     resolve_company,
 )
+from src.watchlist import load_watchlist
 
 
 @pytest.fixture(autouse=True)
-def reset_configured_sources() -> None:
+def reset_configured_sources(tmp_path: Path) -> Generator[None]:
     """Reset the configured sources before each test."""
     tools_module._configured_sources = []
+    watchlist_path = tmp_path / "watchlist.yaml"
+    watchlist_path.write_text("companies: []\n", encoding="utf-8")
+    patcher = patch.object(tools_module, "WATCHLIST_PATH", watchlist_path)
+    patcher.start()
+    yield
+    patcher.stop()
+
+
+def _write_config(path: Path, sources: list[Source]) -> None:
+    """Write a config.yaml with the given sources."""
+    lines = ["sources:"]
+    for source in sources:
+        lines.extend(
+            [
+                f"  - id: {source.id}",
+                f"    name: {source.name}",
+                f"    base_url: {source.base_url}",
+                f"    scraper_module: {source.scraper_module}",
+                f"    description: {source.description}",
+            ]
+        )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def test_init_tools_loads_sources(tmp_path: Path) -> None:
@@ -53,7 +77,7 @@ def test_list_sources_before_init() -> None:
     assert list_sources() == []
 
 
-def test_resolve_company_tool() -> None:
+def test_resolve_company_tool(tmp_path: Path) -> None:
     expected = Company(
         bloomberg_ticker="MSFT US Equity",
         name="Microsoft Corp.",
@@ -67,8 +91,24 @@ def test_resolve_company_tool() -> None:
     mock_resolver.assert_called_once_with("Microsoft")
 
 
-def test_research_company_default_date_range() -> None:
-    articles = research_company("AAPL US Equity", "What is Apple up to?")
+@pytest.mark.asyncio
+async def test_research_company_default_date_range(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    _write_config(
+        config_path,
+        [
+            Source(
+                id="example",
+                name="Example Source",
+                base_url="https://example.com",
+                scraper_module="scrapers.example",
+                description="An example source.",
+            )
+        ],
+    )
+    init_tools(config_path)
+
+    articles = await research_company("AAPL US Equity", "What is Apple up to?")
 
     assert len(articles) == 2
     for article in articles:
@@ -79,22 +119,83 @@ def test_research_company_default_date_range() -> None:
         assert published <= date.today()
 
 
-def test_research_company_source_filter() -> None:
-    articles = research_company(
-        "AAPL US Equity",
-        "News please",
-        sources=["example"],
+@pytest.mark.asyncio
+async def test_research_company_source_filter(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    _write_config(
+        config_path,
+        [
+            Source(
+                id="example",
+                name="Example Source",
+                base_url="https://example.com",
+                scraper_module="scrapers.example",
+                description="An example source.",
+            ),
+            Source(
+                id="pcwatch",
+                name="PC Watch",
+                base_url="https://pc.watch.impress.co.jp/",
+                scraper_module="scrapers.pcwatch",
+                description="Japanese PC/tech news site.",
+            ),
+        ],
+    )
+    init_tools(config_path)
+
+    mock_article = Article(
+        id="pcwatch-001",
+        bloomberg_ticker="AAPL US Equity",
+        source_id="pcwatch",
+        url="https://pc.watch.impress.co.jp/docs/article/1.html",
+        title="PC Watch article",
+        content="PC Watch content",
+        published_at=datetime.now(),
+        fetched_at=datetime.now(),
+        stored_path=Path("data/AAPL US Equity/pcwatch/pcwatch-001.md"),
     )
 
-    assert len(articles) == 1
-    assert articles[0].source_id == "example"
+    def _make_scraper(source: Source) -> MagicMock | None:
+        if source.id == "example":
+            return None
+        pcwatch_scraper = MagicMock()
+        pcwatch_scraper.is_complete = AsyncMock(return_value=True)
+        pcwatch_scraper.fetch_articles = AsyncMock(return_value=[mock_article])
+        return pcwatch_scraper
+
+    with patch("src.tools._load_source_scraper", side_effect=_make_scraper) as mock_load_scraper:
+        articles = await research_company(
+            "AAPL US Equity",
+            "News please",
+            sources=["example"],
+        )
+
+    assert len(articles) == 2
+    assert all(article.source_id == "example" for article in articles)
+    mock_load_scraper.assert_called_once()
 
 
-def test_research_company_custom_date_range() -> None:
+@pytest.mark.asyncio
+async def test_research_company_custom_date_range(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    _write_config(
+        config_path,
+        [
+            Source(
+                id="example",
+                name="Example Source",
+                base_url="https://example.com",
+                scraper_module="scrapers.example",
+                description="An example source.",
+            )
+        ],
+    )
+    init_tools(config_path)
+
     start = (datetime.now() - timedelta(days=250)).strftime("%Y-%m-%d")
     end = datetime.now().strftime("%Y-%m-%d")
 
-    articles = research_company(
+    articles = await research_company(
         "AAPL US Equity",
         "News please",
         start_date=start,
@@ -192,7 +293,21 @@ def test_resolve_company_tool_schema_and_serialization() -> None:
     asyncio.run(check())
 
 
-def test_research_company_tool_schema_and_serialization() -> None:
+def test_research_company_tool_schema_and_serialization(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+sources:
+  - id: example
+    name: Example Source
+    base_url: https://example.com
+    scraper_module: scrapers.example
+    description: An example source.
+""",
+        encoding="utf-8",
+    )
+    init_tools(config_path)
+
     mcp = FastMCP("Test")
     register_tools(mcp)
 
@@ -230,3 +345,103 @@ def test_research_company_tool_schema_and_serialization() -> None:
             assert "stored_path" in article
 
     asyncio.run(check())
+
+
+@pytest.mark.asyncio
+async def test_research_company_upserts_watchlist(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    _write_config(
+        config_path,
+        [
+            Source(
+                id="example",
+                name="Example Source",
+                base_url="https://example.com",
+                scraper_module="scrapers.example",
+                description="An example source.",
+            )
+        ],
+    )
+    init_tools(config_path)
+
+    await research_company("TICKER US Equity", "question")
+
+    watchlist = load_watchlist(tools_module.WATCHLIST_PATH)
+    assert len(watchlist) == 1
+    assert watchlist[0].bloomberg_ticker == "TICKER US Equity"
+
+
+@pytest.mark.asyncio
+async def test_research_company_loads_scraper_and_merges_results(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    _write_config(
+        config_path,
+        [
+            Source(
+                id="pcwatch",
+                name="PC Watch",
+                base_url="https://pc.watch.impress.co.jp/",
+                scraper_module="scrapers.pcwatch",
+                description="Japanese PC/tech news site.",
+            )
+        ],
+    )
+    init_tools(config_path)
+
+    now = datetime.now()
+    fetched = Article(
+        id="fetched-001",
+        bloomberg_ticker="AAPL US Equity",
+        source_id="pcwatch",
+        url="https://pc.watch.impress.co.jp/docs/article/1.html",
+        title="Fetched article",
+        content="Fetched content",
+        published_at=now - timedelta(days=10),
+        fetched_at=now,
+        stored_path=Path("data/AAPL US Equity/pcwatch/fetched-001.md"),
+    )
+
+    with patch("src.tools._load_source_scraper") as mock_load_scraper:
+        scraper = MagicMock()
+        scraper.is_complete = AsyncMock(return_value=False)
+        scraper.fetch_articles = AsyncMock(return_value=[fetched])
+        mock_load_scraper.return_value = scraper
+
+        articles = await research_company("AAPL US Equity", "question")
+
+    assert len(articles) == 1
+    assert articles[0].url == fetched.url
+    scraper.is_complete.assert_awaited_once()
+    scraper.fetch_articles.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_research_company_skips_fetch_when_complete(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    _write_config(
+        config_path,
+        [
+            Source(
+                id="pcwatch",
+                name="PC Watch",
+                base_url="https://pc.watch.impress.co.jp/",
+                scraper_module="scrapers.pcwatch",
+                description="Japanese PC/tech news site.",
+            )
+        ],
+    )
+    init_tools(config_path)
+
+    with patch("src.tools._load_source_scraper") as mock_load_scraper:
+        scraper = MagicMock()
+        scraper.is_complete = AsyncMock(return_value=True)
+        scraper.fetch_articles = AsyncMock(return_value=[])
+        mock_load_scraper.return_value = scraper
+
+        with patch("src.tools.list_cached_articles", return_value=[]) as mock_list_cached:
+            articles = await research_company("AAPL US Equity", "question")
+
+    assert articles == []
+    scraper.is_complete.assert_awaited_once()
+    scraper.fetch_articles.assert_not_awaited()
+    mock_list_cached.assert_called_once()
