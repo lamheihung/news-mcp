@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -108,5 +108,42 @@ def test_server_smoke() -> None:
                     assert article["title"]
                     assert article["content"]
                     assert article["published_at"]
+
+                # Optional pcwatch real scraping path. Skip when Playwright is not
+                # installed or the browser cannot be launched.
+                try:
+                    import playwright  # noqa: F401
+                except ImportError:
+                    pass
+                else:
+                    try:
+                        pcwatch_result = await session.call_tool(
+                            "research_company",
+                            {
+                                "bloomberg_ticker": "000660 KS Equity",
+                                "question": "latest news",
+                                "sources": ["pcwatch"],
+                                "start_date": (date.today() - timedelta(days=30)).isoformat(),
+                                "end_date": date.today().isoformat(),
+                            },
+                        )
+                    except (TimeoutError, McpError) as exc:
+                        pytest.skip(f"pcwatch research unavailable: {exc}")
+
+                    if pcwatch_result.isError:
+                        error_text = ""
+                        if pcwatch_result.content:
+                            error_text = getattr(pcwatch_result.content[0], "text", "")
+                        pytest.skip(f"pcwatch research returned an error: {error_text}")
+
+                    assert pcwatch_result.structuredContent is not None
+                    pcwatch_articles = pcwatch_result.structuredContent["result"]
+                    assert isinstance(pcwatch_articles, list)
+                    for article in pcwatch_articles:
+                        assert article["bloomberg_ticker"] == "000660 KS Equity"
+                        assert article["source_id"] == "pcwatch"
+                        assert article["id"]
+                        assert article["title"]
+                        assert article["published_at"]
 
     asyncio.run(run())
