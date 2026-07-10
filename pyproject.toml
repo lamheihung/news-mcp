@@ -28,6 +28,9 @@ scrapers = [
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = [
+    "integration: tests that hit external services or require a browser",
+]
 
 [tool.mypy]
 python_version = "3.13"
