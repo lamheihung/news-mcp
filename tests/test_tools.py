@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 from collections.abc import Generator
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastmcp import FastMCP
 
+import src.resolver
 import src.tools as tools_module
-from src.models import Article, Company, Source
+from src.models import Article, Company, DateRange, Source
+from src.scraper_base import BaseScraper
 from src.tools import (
     init_tools,
     list_sources,
@@ -21,6 +26,15 @@ from src.tools import (
     resolve_company,
 )
 from src.watchlist import load_watchlist
+
+
+def _mock_gemini_client(payload: dict[str, Any]) -> Any:
+    """Return a mock Gemini client that responds with the given JSON payload."""
+    mock_response: Any = MagicMock()
+    mock_response.text = json.dumps(payload)
+    mock_client: Any = MagicMock()
+    mock_client.models.generate_content.return_value = mock_response
+    return mock_client
 
 
 @pytest.fixture(autouse=True)
@@ -445,3 +459,82 @@ async def test_research_company_skips_fetch_when_complete(tmp_path: Path) -> Non
     scraper.is_complete.assert_awaited_once()
     scraper.fetch_articles.assert_not_awaited()
     mock_list_cached.assert_called_once()
+
+
+def test_resolve_company_upserts_watchlist(tmp_path: Path) -> None:
+    """Calling the resolve_company tool persists the resolved company."""
+    resolver_watchlist_path = tmp_path / "resolver-watchlist.yaml"
+    mock_client = _mock_gemini_client(
+        {
+            "bloomberg_ticker": "AAPL US Equity",
+            "name": "Apple Inc.",
+            "aliases": ["Apple", "AAPL"],
+        }
+    )
+
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}):
+        with patch("src.resolver.genai.Client", return_value=mock_client):
+            with patch.object(src.resolver, "WATCHLIST_PATH", resolver_watchlist_path):
+                company = resolve_company("Apple")
+
+    assert company.bloomberg_ticker == "AAPL US Equity"
+    entries = load_watchlist(resolver_watchlist_path)
+    assert len(entries) == 1
+    assert entries[0].bloomberg_ticker == "AAPL US Equity"
+    assert entries[0].name == "Apple Inc."
+
+
+@pytest.mark.asyncio
+async def test_research_company_merges_results_from_mock_scraper_class(tmp_path: Path) -> None:
+    """A concrete BaseScraper subclass can be loaded and its results merged."""
+
+    class MockScraper(BaseScraper):
+        async def fetch_articles(
+            self, source: Source, company: Company, date_range: DateRange
+        ) -> list[Article]:
+            return [
+                Article(
+                    id="mock-001",
+                    bloomberg_ticker=company.bloomberg_ticker,
+                    source_id=source.id,
+                    url="https://example.com/mock-001",
+                    title="Mock article",
+                    content="Mock content",
+                    published_at=datetime(2026, 6, 15, 12, 0),
+                    fetched_at=datetime.now(),
+                    stored_path=Path("data/mock.md"),
+                )
+            ]
+
+        async def is_complete(
+            self, source: Source, company: Company, date_range: DateRange
+        ) -> bool:
+            return False
+
+    config_path = tmp_path / "config.yaml"
+    _write_config(
+        config_path,
+        [
+            Source(
+                id="mock",
+                name="Mock Source",
+                base_url="https://example.com",
+                scraper_module="tests.test_tools_mock_scraper",
+                description="A mock source.",
+            )
+        ],
+    )
+    init_tools(config_path)
+
+    with patch("src.tools.load_scraper") as mock_load:
+        fake_module = MagicMock()
+        fake_module.__name__ = "mock"
+        fake_module.MockScraper = MockScraper
+        mock_load.return_value = fake_module
+
+        articles = await research_company("TICKER US Equity", "question")
+
+    assert len(articles) == 1
+    assert articles[0].source_id == "mock"
+    assert articles[0].url == "https://example.com/mock-001"
+    mock_load.assert_called_once_with("tests.test_tools_mock_scraper")
