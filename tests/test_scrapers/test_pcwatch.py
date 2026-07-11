@@ -249,7 +249,9 @@ class TestExtractArticle:
         page.wait_for_selector = AsyncMock(return_value=None)
         page.locator = MagicMock(
             side_effect=lambda selector: {
-                "article h1, article .title strong": MagicMock(
+                (
+                    "article h1, article .title strong, article .article-title, h1, .title strong"
+                ): MagicMock(
                     first=MagicMock(text_content=AsyncMock(return_value="Article title")),
                 ),
                 "head": MagicMock(
@@ -385,32 +387,38 @@ class TestPcwatchScraperFetchArticles:
             with patch("scrapers.pcwatch.search_results", new=search_mock):
                 with patch("scrapers.pcwatch.extract_article", new=extract_mock) as mock_extract:
                     with patch("scrapers.pcwatch.save_article") as mock_save:
-                        with patch("scrapers.pcwatch.async_playwright") as mock_playwright:
-                            browser = MagicMock()
-                            context = MagicMock()
-                            page = MagicMock()
-                            browser.new_context = AsyncMock(return_value=context)
-                            context.new_page = AsyncMock(return_value=page)
-                            browser.launch = AsyncMock(return_value=browser)
-                            browser.close = AsyncMock()
-                            playwright_obj = MagicMock(
-                                chromium=MagicMock(launch=AsyncMock(return_value=browser)),
-                            )
-                            mock_playwright.return_value.__aenter__ = AsyncMock(
-                                return_value=playwright_obj
-                            )
-                            mock_playwright.return_value.__aexit__ = AsyncMock(return_value=False)
+                        with patch(
+                            "scrapers.pcwatch.list_cached_articles", return_value=[]
+                        ) as mock_cached:
+                            with patch("scrapers.pcwatch.async_playwright") as mock_playwright:
+                                browser = MagicMock()
+                                context = MagicMock()
+                                page = MagicMock()
+                                browser.new_context = AsyncMock(return_value=context)
+                                context.new_page = AsyncMock(return_value=page)
+                                browser.launch = AsyncMock(return_value=browser)
+                                browser.close = AsyncMock()
+                                playwright_obj = MagicMock(
+                                    chromium=MagicMock(launch=AsyncMock(return_value=browser)),
+                                )
+                                mock_playwright.return_value.__aenter__ = AsyncMock(
+                                    return_value=playwright_obj
+                                )
+                                mock_playwright.return_value.__aexit__ = AsyncMock(
+                                    return_value=False
+                                )
 
-                            articles = await scraper.fetch_articles(
-                                source,
-                                company,
-                                DateRange(start=date(2026, 1, 1), end=date(2026, 6, 30)),
-                            )
+                                articles = await scraper.fetch_articles(
+                                    source,
+                                    company,
+                                    DateRange(start=date(2026, 1, 1), end=date(2026, 6, 30)),
+                                )
 
         assert len(articles) == 1
         assert articles[0].url == result.url
         mock_extract.assert_awaited_once()
         mock_save.assert_called_once_with(article)
+        mock_cached.assert_called_once()
 
         watchlist = load_watchlist(watchlist_path)
         assert watchlist[0].exhausted_before["pcwatch"] == date(2026, 1, 1)

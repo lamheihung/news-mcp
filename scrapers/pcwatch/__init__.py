@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from playwright.async_api import async_playwright
@@ -20,6 +21,8 @@ from src.watchlist import (
 )
 
 WATCHLIST_PATH = Path("data/watchlist.yaml")
+
+logger = logging.getLogger(__name__)
 
 
 def _find_entry(watchlist: list[WatchlistEntry], ticker: str) -> WatchlistEntry | None:
@@ -71,12 +74,19 @@ class PcwatchScraper(BaseScraper):
                             continue
                         seen_urls.add(result.url)
 
-                        article = await extract_article(
-                            page,
-                            result.url,
-                            company.bloomberg_ticker,
-                            source.id,
-                        )
+                        try:
+                            article = await extract_article(
+                                page,
+                                result.url,
+                                company.bloomberg_ticker,
+                                source.id,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "Failed to extract article %s: %s", result.url, exc
+                            )
+                            continue
+
                         if date_range.start <= article.published_at.date() <= date_range.end:
                             save_article(article)
                             new_articles.append(article)

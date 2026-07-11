@@ -117,7 +117,10 @@ async def _extract_content(page: Page) -> str:
         """() => {
             const container =
                 document.querySelector('article .main-contents') ||
-                document.querySelector('article .news');
+                document.querySelector('article .news') ||
+                document.querySelector('.main-contents') ||
+                document.querySelector('.news') ||
+                document.querySelector('.main');
             if (!container) return '';
             const clone = container.cloneNode(true);
             const selectors = [
@@ -155,7 +158,9 @@ async def _extract_publish_date(page: Page, url: str) -> datetime:
 
 async def _extract_title(page: Page) -> str:
     """Return the article title from the standard or legacy markup."""
-    title_locator = page.locator("article h1, article .title strong").first
+    title_locator = page.locator(
+        "article h1, article .title strong, article .article-title, h1, .title strong"
+    ).first
     title_text = (await title_locator.text_content() or "").strip()
     return title_text
 
@@ -164,7 +169,9 @@ async def extract_article(page: Page, url: str, bloomberg_ticker: str, source_id
     """Open a pcwatch article page and extract an Article model."""
     page.set_default_navigation_timeout(60000)
     await page.goto(url, wait_until="domcontentloaded")
-    await page.wait_for_selector("article", timeout=10000)
+    await page.wait_for_selector(
+        "article, .main-contents, .news, h1", timeout=10000
+    )
 
     title = await _extract_title(page)
     published_at = await _extract_publish_date(page, url)

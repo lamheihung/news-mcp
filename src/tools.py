@@ -13,7 +13,7 @@ from pathlib import Path
 from fastmcp import FastMCP
 
 from src.config import load_config
-from src.models import Article, Company, DateRange, Source
+from src.models import Article, Company, DateRange, Source, published_at_sort_key
 from src.resolver import resolve_company as _resolve_company
 from src.scraper_base import BaseScraper
 from src.scraper_loader import ScraperLoadError, get_scraper_class, load_scraper
@@ -96,7 +96,7 @@ async def research_company(
 
     results = sorted(
         articles_by_url.values(),
-        key=lambda article: article.published_at,
+        key=published_at_sort_key,
         reverse=True,
     )
 

@@ -5,6 +5,8 @@
 - **Total Tasks:** 15
 - **Domains:** backend, infrastructure, testing
 - **Estimated Duration:** 2-3 weeks
+- **Status:** Completed
+- **Completed Date:** 2026-07-11
 
 ## Task Dependencies
 
@@ -79,29 +81,29 @@ An equivalent critical path runs through the scraper infrastructure:
 ### Backend
 | ID | Task Name | Dependencies | Status |
 |----|-----------|--------------|--------|
-| 001 | Watchlist Model | Blocked by: None | Not Started |
-| 002 | Watchlist Persistence | Blocked by: 001 | Not Started |
-| 003 | Article Storage | Blocked by: None | Not Started |
-| 004 | Scraper Base Class | Blocked by: None | Not Started |
-| 005 | Scraper Loader | Blocked by: 004 | Not Started |
-| 006 | Resolver Watchlist Update | Blocked by: 001, 002 | Not Started |
-| 007 | Tools Orchestration | Blocked by: 002, 003, 005, 006 | Not Started |
-| 009 | pcwatch Browser Helpers | Blocked by: 001, 003, 004, 008 | Not Started |
-| 010 | pcwatch Scraper Plugin | Blocked by: 001, 002, 003, 004, 005, 008, 009 | Not Started |
+| 001 | Watchlist Model | Blocked by: None | Completed |
+| 002 | Watchlist Persistence | Blocked by: 001 | Completed |
+| 003 | Article Storage | Blocked by: None | Completed |
+| 004 | Scraper Base Class | Blocked by: None | Completed |
+| 005 | Scraper Loader | Blocked by: 004 | Completed |
+| 006 | Resolver Watchlist Update | Blocked by: 001, 002 | Completed |
+| 007 | Tools Orchestration | Blocked by: 002, 003, 005, 006 | Completed |
+| 009 | pcwatch Browser Helpers | Blocked by: 001, 003, 004, 008 | Completed |
+| 010 | pcwatch Scraper Plugin | Blocked by: 001, 002, 003, 004, 005, 008, 009 | Completed |
 
 ### Infrastructure
 | ID | Task Name | Dependencies | Status |
 |----|-----------|--------------|--------|
-| 008 | Playwright Dependency | Blocked by: None | Not Started |
+| 008 | Playwright Dependency | Blocked by: None | Completed |
 
 ### Testing
 | ID | Task Name | Dependencies | Status |
 |----|-----------|--------------|--------|
-| 011 | Persistence Tests | Blocked by: 001, 002, 003 | Not Started |
-| 012 | Scraper Loader Tests | Blocked by: 004, 005 | Not Started |
-| 013 | pcwatch Scraper Tests | Blocked by: 008, 009, 010 | Not Started |
-| 014 | Tools Tests Updates | Blocked by: 006, 007 | Not Started |
-| 015 | Integration Tests Updates | Blocked by: 007, 010 | Not Started |
+| 011 | Persistence Tests | Blocked by: 001, 002, 003 | Completed |
+| 012 | Scraper Loader Tests | Blocked by: 004, 005 | Completed |
+| 013 | pcwatch Scraper Tests | Blocked by: 008, 009, 010 | Completed |
+| 014 | Tools Tests Updates | Blocked by: 006, 007 | Completed |
+| 015 | Integration Tests Updates | Blocked by: 007, 010 | Completed |
 
 ## Parallelization Opportunities
 
@@ -135,14 +137,14 @@ Tasks that can be worked on simultaneously:
 ## Sprint Completion Criteria
 
 All tasks in this sprint are complete when:
-- [ ] All task success criteria verified
-- [ ] All status files show "Done" state
-- [ ] Unit test coverage is at least 80% across new `src/` and `scrapers/` modules
-- [ ] Integration smoke test passes end-to-end
-- [ ] `mypy src tests` passes
-- [ ] `ruff check src tests` passes
-- [ ] `uv lock --locked` passes
-- [ ] No blocking issues remaining
+- [x] All task success criteria verified
+- [x] All status files show "Done" state
+- [x] Unit test coverage is at least 80% across new `src/` and `scrapers/` modules
+- [x] Integration smoke test passes end-to-end
+- [x] `mypy src tests` passes
+- [x] `ruff check src tests` passes
+- [x] `uv lock --locked` passes
+- [x] No blocking issues remaining
 
 ## Notes
 - This sprint implements the first real scraper (`pcwatch`) and the supporting watchlist/storage/scraper infrastructure described in `architecture/002-architecture-design.md` and `specs/pcwatch-scraper.md`.

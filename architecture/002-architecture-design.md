@@ -1,6 +1,6 @@
 # Architecture Design v002
 
-Last updated: 2026-07-08
+Last updated: 2026-07-11
 
 ## Covered Specs
 
@@ -65,7 +65,7 @@ The foundation remains a single Python process running a FastMCP server over std
 ### `src/models.py`
 
 - **Responsibility:** Define Pydantic data models used across the server.
-- **Interfaces:** `Company`, `Source`, `Article`, `DateRange`, and the new `WatchlistEntry`.
+- **Interfaces:** `Company`, `Source`, `Article`, `DateRange`, `WatchlistEntry`, and `published_at_sort_key(article: Article) -> datetime` for normalizing mixed timezone datetimes during sorting.
 - **Dependencies:** Pydantic.
 
 ### `src/resolver.py`
@@ -133,7 +133,7 @@ The foundation remains a single Python process running a FastMCP server over std
   - `async def search_results(page: Page, term: str, stop_before: date) -> list[SearchResult]`
   - `async def extract_article(page: Page, url: str, bloomberg_ticker: str, source_id: str) -> Article`
 - **Dependencies:** Playwright, `src.models`, `src.storage`.
-- **Notes:** Runs headless by default. Headed mode can be enabled via an environment variable for debugging.
+- **Notes:** Runs headless by default. Headed mode can be enabled via the `PCWATCH_HEADED` environment variable for debugging. Extraction uses fallback selectors to handle variation in article page markup; individual pages that cannot be parsed are skipped rather than aborting the scrape.
 
 ## Data Model
 
@@ -257,7 +257,7 @@ class BaseScraper(ABC):
 
 ## Open Questions
 
-- [ ] Should the scraper support a headless vs. headed mode toggle beyond an environment variable?
+- [x] Should the scraper support a headless vs. headed mode toggle beyond an environment variable? — **Environment variable (`PCWATCH_HEADED`) is sufficient for now.**
 - [ ] How should rate limiting / politeness be enforced between page requests?
 - [ ] Should the watchlist be pruned automatically after a certain number of entries?
 

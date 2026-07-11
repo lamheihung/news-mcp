@@ -1,6 +1,6 @@
 # Spec: pcwatch Scraper
 
-Last updated: 2026-07-08
+Last updated: 2026-07-11
 
 ## Summary
 
@@ -98,11 +98,16 @@ companies:
 7. It stops paginating a term when the snippet date is older than `DateRange.start`.
 8. It merges results from all terms, deduplicates by URL, and sorts by published date.
 9. For each article not already cached, it opens the article page and extracts:
-   - Title: `article h1`
-   - Author: `article .article-info ul.author.list li` *(optional)*
-   - Published datetime: `article .article-info .publish-date` (format: `2026年6月22日 06:06`)
-   - Content: text inside `article .main-contents`, excluding `.related-links`/`.relatedLinks` and ad blocks
-10. It saves each new article and returns `list[Article]`.
+   - Title (first match):
+     - `article h1`
+     - `article .title strong`
+     - `article .article-title`
+     - `h1`
+     - `.title strong`
+   - Published datetime: ISO-8601 value from a `<meta>` tag in `<head>` (e.g. `2026-06-22T06:06:00+09:00`)
+   - Content: text inside the first match of `article .main-contents`, `article .news`, `.main-contents`, `.news`, or `.main`, excluding `.related-links`/`.relatedLinks` and ad blocks
+10. It skips any article page that cannot be parsed and continues with the remaining results.
+11. It saves each new article and returns `list[Article]`.
 
 ## Storage
 
@@ -124,9 +129,10 @@ companies:
 
 ## Date Handling
 
-- Article-page datetime is authoritative.
-- Search-result snippet date is a fallback (usually `YYYY/MM/DD`).
+- Article-page datetime is authoritative and parsed from ISO-8601 meta tags.
+- Search-result snippet date is used only for pagination stop logic (usually `YYYY/MM/DD`).
 - Relative snippet dates (e.g. `7 日前`) fall back to the article-page datetime.
+- Articles from different sources may have offset-naive or offset-aware `published_at` values; merging normalizes them for sorting without altering stored values.
 
 ## Filtering
 
@@ -158,9 +164,15 @@ companies:
 
 ## Open Questions
 
-- [ ] Which browser automation library should be used? (e.g. Playwright, Selenium)
-- [ ] Should the scraper support a headless vs. headed mode toggle for debugging?
+- [x] Which browser automation library should be used? (e.g. Playwright, Selenium) — **Playwright**
+- [x] Should the scraper support a headless vs. headed mode toggle for debugging? — **Yes, via `PCWATCH_HEADED` environment variable**
 - [ ] How should rate limiting / politeness be enforced between page requests?
+
+## Resolved Decisions
+
+### Robust extraction across page variants
+- **Rationale:** Manual testing revealed article pages with non-standard markup (e.g. no `<article>` tag). The scraper now uses fallback selectors and skips unparseable pages instead of failing the entire fetch.
+- **Trade-off:** A small number of valid articles may be skipped if their markup is unsupported, but the scraper remains stable across the live site.
 
 ## Constraints
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from src.models import Article, DateRange
+from src.models import Article, DateRange, published_at_sort_key
 
 ARTICLE_STORE_PATH = Path("data")
 
@@ -89,4 +89,4 @@ def list_cached_articles(ticker: str, source_id: str, date_range: DateRange) -> 
         if date_range.start <= published_date <= date_range.end:
             articles.append(article)
 
-    return sorted(articles, key=lambda article: article.published_at, reverse=True)
+    return sorted(articles, key=published_at_sort_key, reverse=True)

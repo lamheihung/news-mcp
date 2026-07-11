@@ -6,10 +6,21 @@ for the canonical definitions.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, model_validator
+
+
+def published_at_sort_key(article: Article) -> datetime:
+    """Return a timezone-aware UTC datetime for sorting articles by publish date.
+
+    Handles articles whose `published_at` may be offset-naive or offset-aware.
+    """
+    dt = article.published_at
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 class Company(BaseModel):
