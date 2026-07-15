@@ -114,6 +114,41 @@ class TestSaveArticle:
         save_article(article)
         assert custom_path.exists()
 
+    def test_writes_embedding_to_frontmatter(self, article_store: Path) -> None:
+        article = Article(
+            id="article-id",
+            bloomberg_ticker="TICKER",
+            source_id="example",
+            url="https://example.com/article",
+            title="Article Title",
+            content="Article body",
+            published_at=datetime(2026, 1, 1, 12, 0),
+            fetched_at=datetime(2026, 1, 2, 12, 0),
+            stored_path=article_path("TICKER", "example", "Article Title"),
+            embedding=[0.1, 0.2, 0.3],
+        )
+        save_article(article)
+
+        text = article.stored_path.read_text(encoding="utf-8")
+        assert "embedding:\n- 0.1\n- 0.2\n- 0.3\n" in text
+
+    def test_does_not_write_embedding_when_none(self, article_store: Path) -> None:
+        article = Article(
+            id="article-id",
+            bloomberg_ticker="TICKER",
+            source_id="example",
+            url="https://example.com/article",
+            title="Article Title",
+            content="Article body",
+            published_at=datetime(2026, 1, 1, 12, 0),
+            fetched_at=datetime(2026, 1, 2, 12, 0),
+            stored_path=article_path("TICKER", "example", "Article Title"),
+        )
+        save_article(article)
+
+        text = article.stored_path.read_text(encoding="utf-8")
+        assert "embedding:" not in text
+
 
 class TestLoadArticle:
     def test_round_trip_reconstructs_article(self, article_store: Path) -> None:
@@ -140,6 +175,45 @@ class TestLoadArticle:
         assert loaded.published_at == original.published_at
         assert loaded.fetched_at == original.fetched_at
         assert loaded.stored_path == original.stored_path
+
+    def test_round_trip_preserves_embedding(self, article_store: Path) -> None:
+        original = Article(
+            id="article-id",
+            bloomberg_ticker="TICKER",
+            source_id="example",
+            url="https://example.com/article",
+            title="Article Title",
+            content="Article body",
+            published_at=datetime(2026, 1, 1, 12, 0),
+            fetched_at=datetime(2026, 1, 2, 12, 0),
+            stored_path=article_path("TICKER", "example", "Article Title"),
+            embedding=[0.1, 0.2, 0.3],
+        )
+        save_article(original)
+        loaded = load_article(original.stored_path)
+
+        assert loaded.embedding == [0.1, 0.2, 0.3]
+
+    def test_loads_legacy_article_without_embedding(self, article_store: Path) -> None:
+        path = article_path("TICKER", "example", "Legacy Title")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "---\n"
+            "id: legacy-id\n"
+            "title: Legacy Title\n"
+            "url: https://example.com\n"
+            "source: example\n"
+            "published_at: '2026-01-01T12:00:00'\n"
+            "fetched_at: '2026-01-02T12:00:00'\n"
+            "bloomberg_ticker: TICKER\n"
+            "---\n"
+            "Legacy body",
+            encoding="utf-8",
+        )
+
+        article = load_article(path)
+        assert article.embedding is None
+        assert article.title == "Legacy Title"
 
     def test_raises_when_frontmatter_is_missing(self, tmp_path: Path) -> None:
         path = tmp_path / "article.md"

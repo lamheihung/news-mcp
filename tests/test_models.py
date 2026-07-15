@@ -74,6 +74,7 @@ def test_article_creation_and_serialization() -> None:
         "fetched_at",
         "stored_path",
         "relevance_score",
+        "embedding",
     }
     assert set(data.keys()) == expected_fields
     assert data["bloomberg_ticker"] == "AAPL US"

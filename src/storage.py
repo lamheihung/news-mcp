@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -35,7 +36,7 @@ def save_article(article: Article) -> None:
     )
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    frontmatter = {
+    frontmatter: dict[str, Any] = {
         "id": article.id,
         "title": article.title,
         "url": article.url,
@@ -44,6 +45,8 @@ def save_article(article: Article) -> None:
         "fetched_at": article.fetched_at.isoformat(),
         "bloomberg_ticker": article.bloomberg_ticker,
     }
+    if article.embedding is not None:
+        frontmatter["embedding"] = article.embedding
     body = (
         "---\n"
         f"{yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True)}"
@@ -73,6 +76,7 @@ def load_article(path: Path) -> Article:
         published_at=datetime.fromisoformat(frontmatter["published_at"]),
         fetched_at=datetime.fromisoformat(frontmatter["fetched_at"]),
         stored_path=path,
+        embedding=frontmatter.get("embedding"),
     )
 
 
