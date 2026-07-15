@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 def published_at_sort_key(article: Article) -> datetime:
@@ -53,6 +53,7 @@ class Article(BaseModel):
     published_at: datetime
     fetched_at: datetime
     stored_path: Path
+    relevance_score: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class DateRange(BaseModel):
@@ -76,3 +77,35 @@ class WatchlistEntry(BaseModel):
     aliases: list[str]
     search_terms: dict[str, list[str]]
     exhausted_before: dict[str, date] = {}
+
+
+class SourceStatus(BaseModel):
+    """Per-source watchlist and cache status returned by operational tools."""
+
+    source_id: str
+    search_terms: list[str]
+    exhausted_before: date | None = None
+    cached_article_count: int
+
+
+class CompanyStatus(BaseModel):
+    """Company-wide watchlist and cache status returned by operational tools."""
+
+    bloomberg_ticker: str
+    name: str
+    aliases: list[str]
+    sources: dict[str, SourceStatus]
+
+
+class ResearchDiagnostics(BaseModel):
+    """Pre-flight diagnostics describing what research_company would do."""
+
+    bloomberg_ticker: str
+    source_id: str
+    date_range: DateRange
+    search_terms: list[str]
+    exhausted_before: date | None = None
+    is_complete: bool
+    cached_article_count: int
+    planned_action: str
+    reason: str
