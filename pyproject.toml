@@ -24,6 +24,7 @@ dev = [
 ]
 scrapers = [
     "playwright>=1.40.0",
+    "sentence-transformers>=3.0.0",
 ]
 
 [tool.pytest.ini_options]

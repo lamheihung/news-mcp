@@ -65,12 +65,14 @@ cp .env.template .env
 
 `config.yaml` defines the developer-curated sources. It is loaded at startup; a missing or malformed file is a startup-blocking error.
 
-For the `pcwatch` scraper to work, Playwright must be installed:
+Optional runtime dependencies (source scrapers and the local RAG embedding model) live in the `scrapers` dependency group:
 
 ```bash
 uv sync --group scrapers
 playwright install chromium
 ```
+
+The `scrapers` group installs `sentence-transformers`, which downloads a ~120MB multilingual embedding model on first use and runs inference locally on the CPU. If the group is not installed, the server still starts but RAG relevance ranking falls back to date sorting.
 
 ## Architecture
 

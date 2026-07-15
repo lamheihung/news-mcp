@@ -18,11 +18,12 @@ An MCP server for investment analysts. Resolves company identifiers to Bloomberg
    ```bash
    uv sync
    ```
-4. To enable source-specific scrapers (e.g. `pcwatch`), also install the optional group and Playwright:
+4. To enable source-specific scrapers (e.g. `pcwatch`) and the local RAG embedding model, also install the optional group and Playwright:
    ```bash
    uv sync --group scrapers
    playwright install chromium
    ```
+   Note: `sentence-transformers` downloads a ~120MB multilingual model on first use and runs inference locally on the CPU.
 5. Run the server:
    ```bash
    uv run main.py
