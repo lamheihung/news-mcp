@@ -8,6 +8,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 
 from scrapers.pcwatch.browser import extract_article, is_headed, search_results
+from src import embeddings
 from src.models import Article, Company, DateRange, Source, WatchlistEntry
 from src.scraper_base import BaseScraper
 from src.storage import list_cached_articles, save_article
@@ -61,6 +62,12 @@ class PcwatchScraper(BaseScraper):
                 ),
             )
 
+        logger.info(
+            "pcwatch search terms for %s: %s",
+            company.bloomberg_ticker,
+            terms,
+        )
+
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=not is_headed())
             context = await browser.new_context()
@@ -88,17 +95,38 @@ class PcwatchScraper(BaseScraper):
                             continue
 
                         if date_range.start <= article.published_at.date() <= date_range.end:
+                            if embeddings.is_available():
+                                try:
+                                    article.embedding = embeddings.embed(
+                                        f"{article.title}\n\n{article.content}"
+                                    )
+                                except Exception as exc:
+                                    logger.warning(
+                                        "Failed to embed article %s: %s", article.url, exc
+                                    )
                             save_article(article)
                             new_articles.append(article)
             finally:
                 await browser.close()
 
-        watchlist = set_exhausted_before(
-            watchlist,
-            company.bloomberg_ticker,
-            source.id,
-            date_range.start,
-        )
+        if new_articles:
+            logger.info(
+                "Saved %d new pcwatch articles for %s; marking exhausted_before=%s",
+                len(new_articles),
+                company.bloomberg_ticker,
+                date_range.start,
+            )
+            watchlist = set_exhausted_before(
+                watchlist,
+                company.bloomberg_ticker,
+                source.id,
+                date_range.start,
+            )
+        else:
+            logger.info(
+                "No new pcwatch articles saved for %s; skipping exhaustion marker",
+                company.bloomberg_ticker,
+            )
         save_watchlist(watchlist, WATCHLIST_PATH)
 
         articles_by_url = {article.url: article for article in cached_articles}
