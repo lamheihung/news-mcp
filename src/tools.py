@@ -24,6 +24,7 @@ from src.models import (
     WatchlistEntry,
     published_at_sort_key,
 )
+from src.rag import rank_articles
 from src.resolver import resolve_company as _resolve_company
 from src.scraper_base import BaseScraper
 from src.scraper_loader import ScraperLoadError, get_scraper_class, load_scraper
@@ -80,27 +81,35 @@ def resolve_company(identifier: str) -> Company:
 
 async def research_company(
     bloomberg_ticker: str,
-    question: str,
+    question: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
     sources: list[str] | None = None,
+    use_rag: bool = True,
+    top_k: int = 10,
 ) -> list[Article]:
     """Research a company across configured sources.
 
     Args:
         bloomberg_ticker: Canonical Bloomberg ticker for the company.
-        question: Analyst's research question (used for future relevance scoring).
+        question: Analyst's research question (used for relevance scoring).
         start_date: Optional ISO date string (YYYY-MM-DD). Defaults to 6 months ago.
         end_date: Optional ISO date string (YYYY-MM-DD). Defaults to today.
         sources: Optional source ID filter. Defaults to all configured sources.
+        use_rag: Whether to rank results by semantic similarity to ``question``.
+        top_k: Maximum number of ranked articles to return when ``use_rag`` is True.
 
     Returns:
         A list of Article objects merged from cache and scrapers, deduplicated
-        by URL and sorted by published_at descending.
+        by URL. When ``use_rag`` is True and a question is provided, articles are
+        sorted by relevance score descending; otherwise they are sorted by
+        ``published_at`` descending.
     """
     logger.debug(
-        "research_company called: ticker=%s, sources=%s",
+        "research_company called: ticker=%s, use_rag=%s, top_k=%d, sources=%s",
         bloomberg_ticker,
+        use_rag,
+        top_k,
         sources,
     )
     date_range = _build_date_range(start_date, end_date)
@@ -114,11 +123,17 @@ async def research_company(
         for article in source_articles:
             articles_by_url[article.url] = article
 
-    results = sorted(
-        articles_by_url.values(),
-        key=published_at_sort_key,
-        reverse=True,
-    )
+    merged = list(articles_by_url.values())
+
+    if use_rag and question is not None and merged:
+        logger.info("Ranking %d article(s) by RAG for %s", len(merged), bloomberg_ticker)
+        results = rank_articles(question, merged, top_k)
+    else:
+        results = sorted(
+            merged,
+            key=published_at_sort_key,
+            reverse=True,
+        )
 
     logger.info(
         "research_company returning %d article(s) for %s",

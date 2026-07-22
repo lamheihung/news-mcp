@@ -9,7 +9,7 @@ from collections.abc import Generator
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from fastmcp import FastMCP
@@ -348,9 +348,13 @@ sources:
         assert "start_date" in properties
         assert "end_date" in properties
         assert "sources" in properties
+        assert "use_rag" in properties
+        assert "top_k" in properties
         required = tool.parameters.get("required", [])
         assert "bloomberg_ticker" in required
-        assert "question" in required
+        assert "question" not in required
+        assert "use_rag" not in required
+        assert "top_k" not in required
         assert "start_date" not in required
 
         result = await mcp.call_tool(
@@ -552,6 +556,108 @@ async def test_research_company_merges_results_from_mock_scraper_class(tmp_path:
     mock_load.assert_called_once_with("tests.test_tools_mock_scraper")
 
 
+class TestResearchCompanyRag:
+    @pytest.mark.asyncio
+    async def test_ranks_articles_when_use_rag_true_and_question_given(
+        self, tmp_path: Path
+    ) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="example",
+                    name="Example Source",
+                    base_url="https://example.com",
+                    scraper_module="scrapers.example",
+                    description="An example source.",
+                )
+            ],
+        )
+        init_tools(config_path)
+
+        ranked = [
+            Article(
+                id="article-001",
+                bloomberg_ticker="AAPL US Equity",
+                source_id="example",
+                url="https://example.com/article-001",
+                title="Ranked article",
+                content="Ranked content",
+                published_at=datetime.now(),
+                fetched_at=datetime.now(),
+                stored_path=Path("data/AAPL US Equity/example/article-001.md"),
+                relevance_score=0.95,
+            )
+        ]
+
+        with patch("src.tools.rank_articles", return_value=ranked) as mock_rank:
+            articles = await research_company(
+                "AAPL US Equity",
+                "What is Apple up to?",
+                use_rag=True,
+                top_k=5,
+            )
+
+        assert articles == ranked
+        mock_rank.assert_called_once_with("What is Apple up to?", ANY, 5)
+
+    @pytest.mark.asyncio
+    async def test_returns_date_sorted_when_use_rag_false(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="example",
+                    name="Example Source",
+                    base_url="https://example.com",
+                    scraper_module="scrapers.example",
+                    description="An example source.",
+                )
+            ],
+        )
+        init_tools(config_path)
+
+        with patch("src.tools.rank_articles") as mock_rank:
+            articles = await research_company(
+                "AAPL US Equity",
+                "What is Apple up to?",
+                use_rag=False,
+            )
+
+        assert len(articles) == 2
+        assert articles[0].published_at >= articles[1].published_at
+        mock_rank.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skips_ranking_when_question_is_none(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="example",
+                    name="Example Source",
+                    base_url="https://example.com",
+                    scraper_module="scrapers.example",
+                    description="An example source.",
+                )
+            ],
+        )
+        init_tools(config_path)
+
+        with patch("src.tools.rank_articles") as mock_rank:
+            articles = await research_company(
+                "AAPL US Equity",
+                question=None,
+                use_rag=True,
+            )
+
+        assert len(articles) == 2
+        mock_rank.assert_not_called()
+
+
 class TestGetCompanyStatus:
     @pytest.mark.asyncio
     async def test_returns_status_for_known_company(self, tmp_path: Path) -> None:
@@ -583,7 +689,8 @@ class TestGetCompanyStatus:
             encoding="utf-8",
         )
 
-        status_list = await get_company_status(["AAPL US Equity"])
+        with patch.object(tools_module, "ARTICLE_STORE_PATH", tmp_path / "data"):
+            status_list = await get_company_status(["AAPL US Equity"])
 
         assert len(status_list) == 1
         status = status_list[0]
