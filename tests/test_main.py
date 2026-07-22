@@ -30,7 +30,15 @@ sources:
     async def check() -> None:
         tools = await mcp.list_tools()
         names = {tool.name for tool in tools}
-        assert names == {"list_sources", "resolve_company", "research_company"}
+        assert names == {
+            "list_sources",
+            "resolve_company",
+            "research_company",
+            "get_company_status",
+            "set_search_terms",
+            "reset_source_cache",
+            "get_research_diagnostics",
+        }
 
     asyncio.run(check())
 

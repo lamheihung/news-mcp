@@ -19,11 +19,15 @@ import src.tools as tools_module
 from src.models import Article, Company, DateRange, Source
 from src.scraper_base import BaseScraper
 from src.tools import (
+    get_company_status,
+    get_research_diagnostics,
     init_tools,
     list_sources,
     register_tools,
     research_company,
+    reset_source_cache,
     resolve_company,
+    set_search_terms,
 )
 from src.watchlist import load_watchlist
 
@@ -226,7 +230,15 @@ def test_register_tools() -> None:
     async def check() -> None:
         tools = await mcp.list_tools()
         names = {tool.name for tool in tools}
-        assert names == {"list_sources", "resolve_company", "research_company"}
+        assert names == {
+            "list_sources",
+            "resolve_company",
+            "research_company",
+            "get_company_status",
+            "set_search_terms",
+            "reset_source_cache",
+            "get_research_diagnostics",
+        }
 
     asyncio.run(check())
 
@@ -538,3 +550,381 @@ async def test_research_company_merges_results_from_mock_scraper_class(tmp_path:
     assert articles[0].source_id == "mock"
     assert articles[0].url == "https://example.com/mock-001"
     mock_load.assert_called_once_with("tests.test_tools_mock_scraper")
+
+
+class TestGetCompanyStatus:
+    @pytest.mark.asyncio
+    async def test_returns_status_for_known_company(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="example",
+                    name="Example Source",
+                    base_url="https://example.com",
+                    scraper_module="scrapers.example",
+                    description="An example source.",
+                )
+            ],
+        )
+        init_tools(config_path)
+
+        watchlist_path = tools_module.WATCHLIST_PATH
+        watchlist_path.write_text(
+            "companies:\n"
+            '  - bloomberg_ticker: "AAPL US Equity"\n'
+            "    name: Apple Inc.\n"
+            "    aliases: [Apple]\n"
+            "    search_terms:\n"
+            "      example: [Apple, AAPL]\n"
+            "    exhausted_before:\n"
+            "      example: 2026-01-01\n",
+            encoding="utf-8",
+        )
+
+        status_list = await get_company_status(["AAPL US Equity"])
+
+        assert len(status_list) == 1
+        status = status_list[0]
+        assert status.bloomberg_ticker == "AAPL US Equity"
+        assert status.name == "Apple Inc."
+        assert status.sources["example"].search_terms == ["Apple", "AAPL"]
+        assert status.sources["example"].exhausted_before == date(2026, 1, 1)
+        assert status.sources["example"].cached_article_count == 0
+
+    @pytest.mark.asyncio
+    async def test_raises_for_unknown_ticker(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="example",
+                    name="Example Source",
+                    base_url="https://example.com",
+                    scraper_module="scrapers.example",
+                    description="An example source.",
+                )
+            ],
+        )
+        init_tools(config_path)
+
+        with pytest.raises(ValueError, match="company MISSING not found in watchlist"):
+            await get_company_status(["MISSING"])
+
+
+class TestSetSearchTerms:
+    @pytest.mark.asyncio
+    async def test_updates_terms_and_clears_exhaustion(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="example",
+                    name="Example Source",
+                    base_url="https://example.com",
+                    scraper_module="scrapers.example",
+                    description="An example source.",
+                )
+            ],
+        )
+        init_tools(config_path)
+
+        watchlist_path = tools_module.WATCHLIST_PATH
+        watchlist_path.write_text(
+            "companies:\n"
+            '  - bloomberg_ticker: "AAPL US Equity"\n'
+            "    name: Apple Inc.\n"
+            "    aliases: [Apple]\n"
+            "    search_terms:\n"
+            "      example: [Old]\n"
+            "    exhausted_before:\n"
+            "      example: 2026-01-01\n",
+            encoding="utf-8",
+        )
+
+        status = await set_search_terms("AAPL US Equity", "example", ["Apple", "AAPL"])
+
+        assert status.sources["example"].search_terms == ["Apple", "AAPL"]
+        assert status.sources["example"].exhausted_before is None
+
+        watchlist = load_watchlist(watchlist_path)
+        assert watchlist[0].search_terms == {"example": ["Apple", "AAPL"]}
+        assert watchlist[0].exhausted_before == {}
+
+    @pytest.mark.asyncio
+    async def test_raises_for_unknown_source(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="example",
+                    name="Example Source",
+                    base_url="https://example.com",
+                    scraper_module="scrapers.example",
+                    description="An example source.",
+                )
+            ],
+        )
+        init_tools(config_path)
+
+        watchlist_path = tools_module.WATCHLIST_PATH
+        watchlist_path.write_text(
+            "companies:\n"
+            '  - bloomberg_ticker: "AAPL US Equity"\n'
+            "    name: Apple Inc.\n"
+            "    aliases: [Apple]\n"
+            "    search_terms: {}\n"
+            "    exhausted_before: {}\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="unknown source_id: unknown"):
+            await set_search_terms("AAPL US Equity", "unknown", ["term"])
+
+
+class TestResetSourceCache:
+    @pytest.mark.asyncio
+    async def test_clears_exhaustion_marker(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="example",
+                    name="Example Source",
+                    base_url="https://example.com",
+                    scraper_module="scrapers.example",
+                    description="An example source.",
+                )
+            ],
+        )
+        init_tools(config_path)
+
+        watchlist_path = tools_module.WATCHLIST_PATH
+        watchlist_path.write_text(
+            "companies:\n"
+            '  - bloomberg_ticker: "AAPL US Equity"\n'
+            "    name: Apple Inc.\n"
+            "    aliases: [Apple]\n"
+            "    search_terms: {}\n"
+            "    exhausted_before:\n"
+            "      example: 2026-01-01\n",
+            encoding="utf-8",
+        )
+
+        status = await reset_source_cache("AAPL US Equity", "example")
+
+        assert status.sources["example"].exhausted_before is None
+
+    @pytest.mark.asyncio
+    async def test_deletes_cached_articles_when_requested(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="example",
+                    name="Example Source",
+                    base_url="https://example.com",
+                    scraper_module="scrapers.example",
+                    description="An example source.",
+                )
+            ],
+        )
+        init_tools(config_path)
+
+        watchlist_path = tools_module.WATCHLIST_PATH
+        watchlist_path.write_text(
+            "companies:\n"
+            '  - bloomberg_ticker: "AAPL US Equity"\n'
+            "    name: Apple Inc.\n"
+            "    aliases: [Apple]\n"
+            "    search_terms: {}\n"
+            "    exhausted_before: {}\n",
+            encoding="utf-8",
+        )
+
+        cache_dir = tmp_path / "data" / "AAPL US Equity" / "example"
+        cache_dir.mkdir(parents=True)
+        cache_file = cache_dir / "article.md"
+        cache_file.write_text("content", encoding="utf-8")
+
+        with patch.object(tools_module, "ARTICLE_STORE_PATH", tmp_path / "data"):
+            status = await reset_source_cache(
+                "AAPL US Equity", "example", delete_cached_articles=True
+            )
+
+        assert status.sources["example"].cached_article_count == 0
+        assert not cache_file.exists()
+
+
+class TestGetResearchDiagnostics:
+    @pytest.mark.asyncio
+    async def test_returns_mock_action_for_example_source(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="example",
+                    name="Example Source",
+                    base_url="https://example.com",
+                    scraper_module="scrapers.example",
+                    description="An example source.",
+                )
+            ],
+        )
+        init_tools(config_path)
+
+        watchlist_path = tools_module.WATCHLIST_PATH
+        watchlist_path.write_text(
+            "companies:\n"
+            '  - bloomberg_ticker: "AAPL US Equity"\n'
+            "    name: Apple Inc.\n"
+            "    aliases: [Apple]\n"
+            "    search_terms: {}\n"
+            "    exhausted_before: {}\n",
+            encoding="utf-8",
+        )
+
+        diagnostics = await get_research_diagnostics("AAPL US Equity")
+
+        assert len(diagnostics) == 1
+        assert diagnostics[0].planned_action == "mock"
+        assert diagnostics[0].source_id == "example"
+        assert diagnostics[0].is_complete is False
+
+    @pytest.mark.asyncio
+    async def test_returns_return_cached_when_complete(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="pcwatch",
+                    name="PC Watch",
+                    base_url="https://pc.watch.impress.co.jp/",
+                    scraper_module="scrapers.pcwatch",
+                    description="Japanese PC/tech news site.",
+                )
+            ],
+        )
+        init_tools(config_path)
+
+        watchlist_path = tools_module.WATCHLIST_PATH
+        watchlist_path.write_text(
+            "companies:\n"
+            '  - bloomberg_ticker: "AAPL US Equity"\n'
+            "    name: Apple Inc.\n"
+            "    aliases: [Apple]\n"
+            "    search_terms:\n"
+            "      pcwatch: [Apple]\n"
+            "    exhausted_before:\n"
+            "      pcwatch: 2026-01-01\n",
+            encoding="utf-8",
+        )
+
+        with patch("src.tools._load_source_scraper") as mock_load_scraper:
+            scraper = MagicMock()
+            scraper.is_complete = AsyncMock(return_value=True)
+            mock_load_scraper.return_value = scraper
+
+            diagnostics = await get_research_diagnostics(
+                "AAPL US Equity",
+                start_date="2026-01-01",
+                end_date="2026-06-30",
+            )
+
+        assert len(diagnostics) == 1
+        assert diagnostics[0].planned_action == "return_cached"
+        assert diagnostics[0].is_complete is True
+        assert "2026-01-01" in diagnostics[0].reason
+
+    @pytest.mark.asyncio
+    async def test_returns_scrape_when_incomplete(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="pcwatch",
+                    name="PC Watch",
+                    base_url="https://pc.watch.impress.co.jp/",
+                    scraper_module="scrapers.pcwatch",
+                    description="Japanese PC/tech news site.",
+                )
+            ],
+        )
+        init_tools(config_path)
+
+        watchlist_path = tools_module.WATCHLIST_PATH
+        watchlist_path.write_text(
+            "companies:\n"
+            '  - bloomberg_ticker: "AAPL US Equity"\n'
+            "    name: Apple Inc.\n"
+            "    aliases: [Apple]\n"
+            "    search_terms:\n"
+            "      pcwatch: [Apple]\n"
+            "    exhausted_before:\n"
+            "      pcwatch: 2026-01-01\n",
+            encoding="utf-8",
+        )
+
+        with patch("src.tools._load_source_scraper") as mock_load_scraper:
+            scraper = MagicMock()
+            scraper.is_complete = AsyncMock(return_value=False)
+            mock_load_scraper.return_value = scraper
+
+            diagnostics = await get_research_diagnostics(
+                "AAPL US Equity",
+                start_date="2025-06-01",
+                end_date="2026-06-30",
+            )
+
+        assert len(diagnostics) == 1
+        assert diagnostics[0].planned_action == "scrape"
+        assert diagnostics[0].is_complete is False
+
+    @pytest.mark.asyncio
+    async def test_filters_by_source_id(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.yaml"
+        _write_config(
+            config_path,
+            [
+                Source(
+                    id="example",
+                    name="Example Source",
+                    base_url="https://example.com",
+                    scraper_module="scrapers.example",
+                    description="An example source.",
+                ),
+                Source(
+                    id="pcwatch",
+                    name="PC Watch",
+                    base_url="https://pc.watch.impress.co.jp/",
+                    scraper_module="scrapers.pcwatch",
+                    description="Japanese PC/tech news site.",
+                ),
+            ],
+        )
+        init_tools(config_path)
+
+        watchlist_path = tools_module.WATCHLIST_PATH
+        watchlist_path.write_text(
+            "companies:\n"
+            '  - bloomberg_ticker: "AAPL US Equity"\n'
+            "    name: Apple Inc.\n"
+            "    aliases: [Apple]\n"
+            "    search_terms: {}\n"
+            "    exhausted_before: {}\n",
+            encoding="utf-8",
+        )
+
+        diagnostics = await get_research_diagnostics("AAPL US Equity", source_id="example")
+
+        assert len(diagnostics) == 1
+        assert diagnostics[0].source_id == "example"

@@ -62,6 +62,10 @@ def test_server_smoke() -> None:
                     "list_sources",
                     "resolve_company",
                     "research_company",
+                    "get_company_status",
+                    "set_search_terms",
+                    "reset_source_cache",
+                    "get_research_diagnostics",
                 }
 
                 list_result = await session.call_tool("list_sources", {})
