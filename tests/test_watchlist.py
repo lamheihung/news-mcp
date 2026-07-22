@@ -12,11 +12,13 @@ from pydantic import ValidationError
 from src.models import Company, WatchlistEntry
 from src.watchlist import (
     _find_entry,
+    clear_exhausted_before,
     get_exhausted_before,
     get_search_terms,
     load_watchlist,
     save_watchlist,
     set_exhausted_before,
+    set_search_terms,
     upsert_company,
 )
 
@@ -288,3 +290,96 @@ class TestSetExhaustedBefore:
     def test_raises_when_ticker_not_found(self) -> None:
         with pytest.raises(ValueError, match="company TICKER not found in watchlist"):
             set_exhausted_before([], "TICKER", "pcwatch", date(2026, 1, 1))
+
+
+class TestSetSearchTerms:
+    def test_replaces_terms_for_existing_ticker_and_source(self) -> None:
+        entries = [
+            WatchlistEntry(
+                bloomberg_ticker="TICKER",
+                name="Name",
+                aliases=[],
+                search_terms={"pcwatch": ["old"]},
+            )
+        ]
+        set_search_terms(entries, "TICKER", "pcwatch", ["new1", "new2"])
+        assert entries[0].search_terms == {"pcwatch": ["new1", "new2"]}
+
+    def test_clears_exhaustion_marker_for_source(self) -> None:
+        entries = [
+            WatchlistEntry(
+                bloomberg_ticker="TICKER",
+                name="Name",
+                aliases=[],
+                search_terms={"pcwatch": ["term"]},
+                exhausted_before={"pcwatch": date(2026, 1, 1)},
+            )
+        ]
+        set_search_terms(entries, "TICKER", "pcwatch", ["new"])
+        assert entries[0].exhausted_before == {}
+
+    def test_copies_terms_so_mutations_do_not_leak(self) -> None:
+        entries = [
+            WatchlistEntry(
+                bloomberg_ticker="TICKER",
+                name="Name",
+                aliases=[],
+                search_terms={},
+            )
+        ]
+        terms = ["term"]
+        set_search_terms(entries, "TICKER", "pcwatch", terms)
+        terms.append("leak")
+        assert entries[0].search_terms == {"pcwatch": ["term"]}
+
+    def test_raises_when_ticker_not_found(self) -> None:
+        with pytest.raises(ValueError, match="company TICKER not found in watchlist"):
+            set_search_terms([], "TICKER", "pcwatch", ["term"])
+
+
+class TestClearExhaustedBefore:
+    def test_removes_marker_for_existing_source(self) -> None:
+        entries = [
+            WatchlistEntry(
+                bloomberg_ticker="TICKER",
+                name="Name",
+                aliases=[],
+                search_terms={},
+                exhausted_before={"pcwatch": date(2026, 1, 1)},
+            )
+        ]
+        clear_exhausted_before(entries, "TICKER", "pcwatch")
+        assert entries[0].exhausted_before == {}
+
+    def test_is_noop_when_source_has_no_marker(self) -> None:
+        entries = [
+            WatchlistEntry(
+                bloomberg_ticker="TICKER",
+                name="Name",
+                aliases=[],
+                search_terms={},
+                exhausted_before={},
+            )
+        ]
+        clear_exhausted_before(entries, "TICKER", "pcwatch")
+        assert entries[0].exhausted_before == {}
+
+    def test_only_removes_marker_for_requested_source(self) -> None:
+        entries = [
+            WatchlistEntry(
+                bloomberg_ticker="TICKER",
+                name="Name",
+                aliases=[],
+                search_terms={},
+                exhausted_before={
+                    "pcwatch": date(2026, 1, 1),
+                    "example": date(2026, 2, 1),
+                },
+            )
+        ]
+        clear_exhausted_before(entries, "TICKER", "pcwatch")
+        assert entries[0].exhausted_before == {"example": date(2026, 2, 1)}
+
+    def test_raises_when_ticker_not_found(self) -> None:
+        with pytest.raises(ValueError, match="company TICKER not found in watchlist"):
+            clear_exhausted_before([], "TICKER", "pcwatch")

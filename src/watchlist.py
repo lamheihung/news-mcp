@@ -94,3 +94,31 @@ def set_exhausted_before(
         raise ValueError(f"company {ticker} not found in watchlist")
     entry.exhausted_before[source_id] = value
     return entries
+
+
+def set_search_terms(
+    entries: list[WatchlistEntry],
+    ticker: str,
+    source_id: str,
+    terms: list[str],
+) -> list[WatchlistEntry]:
+    """Replace search terms for a company/source and clear its exhaustion marker."""
+    entry = _find_entry(entries, ticker)
+    if entry is None:
+        raise ValueError(f"company {ticker} not found in watchlist")
+    entry.search_terms[source_id] = list(terms)
+    entry.exhausted_before.pop(source_id, None)
+    return entries
+
+
+def clear_exhausted_before(
+    entries: list[WatchlistEntry],
+    ticker: str,
+    source_id: str,
+) -> list[WatchlistEntry]:
+    """Remove the exhaustion marker for a company and source."""
+    entry = _find_entry(entries, ticker)
+    if entry is None:
+        raise ValueError(f"company {ticker} not found in watchlist")
+    entry.exhausted_before.pop(source_id, None)
+    return entries
